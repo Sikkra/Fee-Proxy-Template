@@ -58,6 +58,13 @@ contract IntuitionFeeProxy {
         string operation
     );
 
+    /// @notice Emitted when accumulated fees are withdrawn
+    event FeesWithdrawn(
+        address indexed caller,
+        address indexed recipient,
+        uint256 amount
+    );
+
     /// @notice Emitted when a transaction is forwarded to MultiVault (debug)
     event TransactionForwarded(
         string operation,
@@ -193,6 +200,29 @@ contract IntuitionFeeProxy {
         emit AdminWhitelistUpdated(admin, status);
     }
 
+    /// @notice Withdraw accumulated fees from the proxy balance
+    /// @dev Callable by whitelisted admins or the current fee recipient
+    /// @param recipient Address to receive withdrawn fees
+    /// @param amount Amount of fees to withdraw
+    function withdrawFees(address payable recipient, uint256 amount) external {
+        if (!whitelistedAdmins[msg.sender] && msg.sender != feeRecipient) {
+            revert Errors.IntuitionFeeProxy_NotWhitelistedAdmin();
+        }
+        if (recipient == address(0)) {
+            revert Errors.IntuitionFeeProxy_ZeroAddress();
+        }
+        if (amount > address(this).balance) {
+            revert Errors.IntuitionFeeProxy_InsufficientValue();
+        }
+
+        (bool success, ) = recipient.call{value: amount}("");
+        if (!success) {
+            revert Errors.IntuitionFeeProxy_TransferFailed();
+        }
+
+        emit FeesWithdrawn(msg.sender, recipient, amount);
+    }
+
     // ============ Proxy Functions (Payable) ============
 
     /// @notice Create atoms with fee collection and deposit to receiver
@@ -227,7 +257,6 @@ contract IntuitionFeeProxy {
             revert Errors.IntuitionFeeProxy_InsufficientValue();
         }
 
-        _transferFee(fee);
         emit FeesCollected(msg.sender, fee, "createAtoms");
         emit TransactionForwarded("createAtoms", msg.sender, fee, multiVaultCost, msg.value);
 
@@ -292,7 +321,6 @@ contract IntuitionFeeProxy {
             revert Errors.IntuitionFeeProxy_InsufficientValue();
         }
 
-        _transferFee(fee);
         emit FeesCollected(msg.sender, fee, "createTriples");
         emit TransactionForwarded("createTriples", msg.sender, fee, multiVaultCost, msg.value);
 
@@ -348,7 +376,6 @@ contract IntuitionFeeProxy {
                                    / (FEE_DENOMINATOR + depositPercentageFee);
         uint256 fee = msg.value - multiVaultAmount;
 
-        _transferFee(fee);
         emit FeesCollected(msg.sender, fee, "deposit");
         emit TransactionForwarded("deposit", msg.sender, fee, multiVaultAmount, msg.value);
 
@@ -399,7 +426,6 @@ contract IntuitionFeeProxy {
             revert Errors.IntuitionFeeProxy_InsufficientValue();
         }
 
-        _transferFee(fee);
         emit FeesCollected(msg.sender, fee, "depositBatch");
         emit TransactionForwarded("depositBatch", msg.sender, fee, totalDeposit, msg.value);
 
@@ -471,17 +497,6 @@ contract IntuitionFeeProxy {
     }
 
     // ============ Internal Functions ============
-
-    /// @notice Transfer collected fees to recipient
-    /// @param amount Amount to transfer
-    function _transferFee(uint256 amount) internal {
-        if (amount > 0) {
-            (bool success, ) = feeRecipient.call{value: amount}("");
-            if (!success) {
-                revert Errors.IntuitionFeeProxy_TransferFailed();
-            }
-        }
-    }
 
     /// @notice Sum array of uint256 values
     /// @param arr Array to sum

@@ -208,6 +208,63 @@ describe("IntuitionFeeProxy", function () {
       await expect(proxy.connect(admin1).setDepositPercentageFee(10001n))
         .to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_FeePercentageTooHigh");
     });
+
+    it("Should allow an admin to withdraw accumulated fees", async function () {
+      const { proxy, admin1, user } = await loadFixture(deployFixture);
+
+      const desiredDepositAmount = ethers.parseEther("1");
+      const totalToSend = await proxy.getTotalDepositCost(desiredDepositAmount);
+      const expectedFee = await proxy.calculateDepositFee(1n, desiredDepositAmount);
+      const termId = ethers.zeroPadValue("0x01", 32);
+
+      await proxy.connect(user).deposit(user.address, termId, 1n, 0n, { value: totalToSend });
+      expect(await ethers.provider.getBalance(await proxy.getAddress())).to.equal(expectedFee);
+
+      const initialRecipientBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+
+      await expect(proxy.connect(admin1).withdrawFees(FEE_RECIPIENT, expectedFee))
+        .to.emit(proxy, "FeesWithdrawn")
+        .withArgs(admin1.address, FEE_RECIPIENT, expectedFee);
+
+      expect(await ethers.provider.getBalance(await proxy.getAddress())).to.equal(0n);
+      expect(await ethers.provider.getBalance(FEE_RECIPIENT)).to.equal(initialRecipientBalance + expectedFee);
+    });
+
+    it("Should allow the current fee recipient to withdraw accumulated fees", async function () {
+      const { proxy, admin1, user, nonAdmin } = await loadFixture(deployFixture);
+
+      await proxy.connect(admin1).setFeeRecipient(nonAdmin.address);
+
+      const desiredDepositAmount = ethers.parseEther("1");
+      const totalToSend = await proxy.getTotalDepositCost(desiredDepositAmount);
+      const expectedFee = await proxy.calculateDepositFee(1n, desiredDepositAmount);
+      const termId = ethers.zeroPadValue("0x01", 32);
+
+      await proxy.connect(user).deposit(user.address, termId, 1n, 0n, { value: totalToSend });
+
+      await expect(proxy.connect(nonAdmin).withdrawFees(nonAdmin.address, expectedFee))
+        .to.emit(proxy, "FeesWithdrawn")
+        .withArgs(nonAdmin.address, nonAdmin.address, expectedFee);
+
+      expect(await ethers.provider.getBalance(await proxy.getAddress())).to.equal(0n);
+    });
+
+    it("Should reject unauthorized fee withdrawals", async function () {
+      const { proxy, nonAdmin } = await loadFixture(deployFixture);
+
+      await expect(proxy.connect(nonAdmin).withdrawFees(nonAdmin.address, 1n))
+        .to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_NotWhitelistedAdmin");
+    });
+
+    it("Should reject invalid fee withdrawals", async function () {
+      const { proxy, admin1 } = await loadFixture(deployFixture);
+
+      await expect(proxy.connect(admin1).withdrawFees(ethers.ZeroAddress, 1n))
+        .to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_ZeroAddress");
+
+      await expect(proxy.connect(admin1).withdrawFees(FEE_RECIPIENT, 1n))
+        .to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_InsufficientValue");
+    });
   });
 
   describe("Proxy Functions - createAtoms", function () {
@@ -225,13 +282,13 @@ describe("IntuitionFeeProxy", function () {
       const multiVaultCost = (atomCost * 2n) + totalDeposit;
       const totalRequired = fee + multiVaultCost;
 
-      const initialBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const initialBalance = await ethers.provider.getBalance(await proxy.getAddress());
 
       await expect(proxy.connect(user).createAtoms(user.address, data, assets, curveId, { value: totalRequired }))
         .to.emit(proxy, "FeesCollected")
         .withArgs(user.address, fee, "createAtoms");
 
-      const finalBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const finalBalance = await ethers.provider.getBalance(await proxy.getAddress());
       expect(finalBalance - initialBalance).to.equal(fee);
     });
 
@@ -247,11 +304,11 @@ describe("IntuitionFeeProxy", function () {
       const multiVaultCost = atomCost * 2n;
       const totalRequired = fee + multiVaultCost;
 
-      const initialBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const initialBalance = await ethers.provider.getBalance(await proxy.getAddress());
 
       await proxy.connect(user).createAtoms(user.address, data, assets, curveId, { value: totalRequired });
 
-      const finalBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const finalBalance = await ethers.provider.getBalance(await proxy.getAddress());
       expect(finalBalance - initialBalance).to.equal(0n);
     });
 
@@ -285,13 +342,13 @@ describe("IntuitionFeeProxy", function () {
       const multiVaultCost = tripleCost + totalDeposit;
       const totalRequired = fee + multiVaultCost;
 
-      const initialBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const initialBalance = await ethers.provider.getBalance(await proxy.getAddress());
 
       await expect(proxy.connect(user).createTriples(user.address, subjectIds, predicateIds, objectIds, assets, curveId, { value: totalRequired }))
         .to.emit(proxy, "FeesCollected")
         .withArgs(user.address, fee, "createTriples");
 
-      const finalBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const finalBalance = await ethers.provider.getBalance(await proxy.getAddress());
       expect(finalBalance - initialBalance).to.equal(fee);
     });
 
@@ -317,14 +374,14 @@ describe("IntuitionFeeProxy", function () {
       const desiredDepositAmount = ethers.parseEther("10");
       const totalToSend = await proxy.getTotalDepositCost(desiredDepositAmount);
 
-      const initialBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const initialBalance = await ethers.provider.getBalance(await proxy.getAddress());
 
       const termId = ethers.zeroPadValue("0x01", 32);
 
       await expect(proxy.connect(user).deposit(user.address, termId, 1n, 0n, { value: totalToSend }))
         .to.emit(proxy, "FeesCollected");
 
-      const finalBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const finalBalance = await ethers.provider.getBalance(await proxy.getAddress());
       const collectedFee = finalBalance - initialBalance;
       const expectedFee = await proxy.calculateDepositFee(1n, desiredDepositAmount);
       expect(collectedFee).to.be.closeTo(expectedFee, 1);
@@ -374,13 +431,13 @@ describe("IntuitionFeeProxy", function () {
       const fee = await proxy.calculateDepositFee(2n, totalDeposit);
       const totalRequired = totalDeposit + fee;
 
-      const initialBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const initialBalance = await ethers.provider.getBalance(await proxy.getAddress());
 
       await expect(proxy.connect(user).depositBatch(user.address, termIds, curveIds, assets, minShares, { value: totalRequired }))
         .to.emit(proxy, "FeesCollected")
         .withArgs(user.address, fee, "depositBatch");
 
-      const finalBalance = await ethers.provider.getBalance(FEE_RECIPIENT);
+      const finalBalance = await ethers.provider.getBalance(await proxy.getAddress());
       expect(finalBalance - initialBalance).to.equal(fee);
     });
 
