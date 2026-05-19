@@ -266,6 +266,19 @@ describe("IntuitionFeeProxy", function () {
         proxy.connect(user).createAtoms(user.address, data, assets, curveId, { value: ethers.parseEther("0.01") })
       ).to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_InsufficientValue");
     });
+
+    it("Should revert when createAtoms receiver is not caller", async function () {
+      const { proxy, user, nonAdmin } = await loadFixture(deployFixture);
+
+      await expect(
+        proxy.connect(user).createAtoms(
+          nonAdmin.address,
+          [ethers.toUtf8Bytes("ipfs://atom1")],
+          [0n],
+          1n
+        )
+      ).to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_ReceiverMismatch");
+    });
   });
 
   describe("Proxy Functions - createTriples", function () {
@@ -307,6 +320,21 @@ describe("IntuitionFeeProxy", function () {
       await expect(
         proxy.connect(user).createTriples(user.address, subjectIds, predicateIds, objectIds, assets, curveId, { value: ethers.parseEther("10") })
       ).to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_WrongArrayLengths");
+    });
+
+    it("Should revert when createTriples receiver is not caller", async function () {
+      const { proxy, user, nonAdmin } = await loadFixture(deployFixture);
+
+      await expect(
+        proxy.connect(user).createTriples(
+          nonAdmin.address,
+          [ethers.zeroPadValue("0x01", 32)],
+          [ethers.zeroPadValue("0x02", 32)],
+          [ethers.zeroPadValue("0x03", 32)],
+          [0n],
+          1n
+        )
+      ).to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_ReceiverMismatch");
     });
   });
 
@@ -359,6 +387,15 @@ describe("IntuitionFeeProxy", function () {
       expect(await proxy.getMultiVaultAmountFromValue(DEPOSIT_FEE)).to.equal(0n);
       expect(await proxy.getMultiVaultAmountFromValue(ethers.parseEther("0.05"))).to.equal(0n);
     });
+
+    it("Should revert when deposit receiver is not caller", async function () {
+      const { proxy, user, nonAdmin } = await loadFixture(deployFixture);
+      const termId = ethers.zeroPadValue("0x01", 32);
+
+      await expect(
+        proxy.connect(user).deposit(nonAdmin.address, termId, 1n, 0n)
+      ).to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_ReceiverMismatch");
+    });
   });
 
   describe("Proxy Functions - depositBatch", function () {
@@ -395,6 +432,20 @@ describe("IntuitionFeeProxy", function () {
       await expect(
         proxy.connect(user).depositBatch(user.address, termIds, curveIds, assets, minShares, { value: ethers.parseEther("20") })
       ).to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_WrongArrayLengths");
+    });
+
+    it("Should revert when depositBatch receiver is not caller", async function () {
+      const { proxy, user, nonAdmin } = await loadFixture(deployFixture);
+
+      await expect(
+        proxy.connect(user).depositBatch(
+          nonAdmin.address,
+          [ethers.zeroPadValue("0x01", 32)],
+          [1n],
+          [ethers.parseEther("1")],
+          [0n]
+        )
+      ).to.be.revertedWithCustomError(proxy, "IntuitionFeeProxy_ReceiverMismatch");
     });
   });
 

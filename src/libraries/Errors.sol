@@ -27,4 +27,7 @@ library Errors {
 
     /// @notice Fee percentage exceeds maximum allowed (100%)
     error IntuitionFeeProxy_FeePercentageTooHigh();
+
+    /// @notice Receiver must be the caller to prevent shares being redirected
+    error IntuitionFeeProxy_ReceiverMismatch();
 }

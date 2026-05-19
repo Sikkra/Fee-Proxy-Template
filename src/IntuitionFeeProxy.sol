@@ -208,6 +208,8 @@ contract IntuitionFeeProxy {
         uint256[] calldata assets,
         uint256 curveId
     ) external payable returns (bytes32[] memory atomIds) {
+        _requireSenderReceiver(receiver);
+
         if (data.length != assets.length) {
             revert Errors.IntuitionFeeProxy_WrongArrayLengths();
         }
@@ -271,6 +273,8 @@ contract IntuitionFeeProxy {
         uint256[] calldata assets,
         uint256 curveId
     ) external payable returns (bytes32[] memory tripleIds) {
+        _requireSenderReceiver(receiver);
+
         if (subjectIds.length != predicateIds.length ||
             predicateIds.length != objectIds.length ||
             objectIds.length != assets.length) {
@@ -337,6 +341,8 @@ contract IntuitionFeeProxy {
         uint256 curveId,
         uint256 minShares
     ) external payable returns (uint256 shares) {
+        _requireSenderReceiver(receiver);
+
         // Must send more than just the fixed fee
         if (msg.value <= depositFixedFee) {
             revert Errors.IntuitionFeeProxy_InsufficientValue();
@@ -384,6 +390,8 @@ contract IntuitionFeeProxy {
         uint256[] calldata assets,
         uint256[] calldata minShares
     ) external payable returns (uint256[] memory shares) {
+        _requireSenderReceiver(receiver);
+
         if (termIds.length != curveIds.length ||
             curveIds.length != assets.length ||
             assets.length != minShares.length) {
@@ -480,6 +488,13 @@ contract IntuitionFeeProxy {
             if (!success) {
                 revert Errors.IntuitionFeeProxy_TransferFailed();
             }
+        }
+    }
+
+    /// @notice Prevent dApps from redirecting user-paid shares to another address
+    function _requireSenderReceiver(address receiver) internal view {
+        if (receiver != msg.sender) {
+            revert Errors.IntuitionFeeProxy_ReceiverMismatch();
         }
     }
 
